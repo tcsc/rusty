@@ -1,6 +1,7 @@
 #![no_std]
 
 mod audio;
+pub use audio::PeripheralClock;
 use stm32f4xx_hal::stm32;
 
 use cortex_m_semihosting::{hprintln}; // debug, 
@@ -24,6 +25,7 @@ fn pll_enable(rcc: &stm32::rcc::RegisterBlock) {
     }
     hprintln!("I2S PLL to started").unwrap();
 }
+
 
 pub fn set_i2s_clock(rcc: &stm32::rcc::RegisterBlock, 
                      multiplier: u16, 

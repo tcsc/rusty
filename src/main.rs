@@ -1,56 +1,29 @@
 #![no_std]
 #![no_main]
 
+// RTFM macros need this for clean clippy report
+#![allow(clippy::toplevel_ref_arg)]
+
 mod button;
-use button::Button;
 
 extern crate panic_semihosting;
 use stm32f407_audio as audio;
-
 use stm32f407g_disc as board;
 
 use crate::board::{
     led::{LedColor, Leds},
+    stm32::{RCC},
 };
 
-// use cortex_m::peripheral::Peripherals;
-// use cortex_m_semihosting::hprintln;
-
-// #[cortex_m_rt::entry]
-// fn main() -> ! {
-// 	hprintln!("Hello, world!").unwrap();
-
-// 	let peripherals = stm32::Peripherals::take().unwrap();
-//     let cortex_peripherals = Peripherals::take().unwrap();
-//     let gpiod = peripherals.GPIOD.split();
-//     //let mut leds = Leds::new(gpiod);
-
-//     // Constrain clock registers
-//     let rcc = peripherals.RCC.constrain();
-//     let clocks = rcc.cfgr.sysclk(168.mhz()).freeze();
-//  //   let mut delay = Delay::new(cortex_peripherals.SYST, clocks);
-
-//     let mut t = Timer::tim2(peripherals.TIM2, 1.hz(), clocks);
-//     t.listen(Event::TimeOut);
-
-//     loop {
-//     }
-// }
-
-// #[interrupt]
-// fn TIM2() {
-//     hprintln!("Timer!").unwrap();
-// }
-
-// extern crate panic_semihosting;
-use rtfm::{app, Instant, Duration, U32Ext};
+use rtfm::{app, Instant};
 use cortex_m_semihosting::{hprintln}; // debug, 
-use stm32f4xx_hal::{prelude::*, gpio, timer, timer::Timer};
-use stm32f407g_disc::{stm32, stm32::RCC};
+use stm32f4xx_hal::{prelude::*, gpio};
+
+use button::Button;
 
 type UserButtonPin = gpio::gpioa::PA0<gpio::Input<gpio::PullDown>>;
 
-const gpio_poll_interval : u32 = 840_000;
+const GPIO_POLL_INTERVAL : u32 = 840_000;
 
 #[app(device = stm32f407g_disc)]
 const APP: () = {
@@ -63,9 +36,9 @@ const APP: () = {
         
         hprintln!("Constraining RCC").unwrap();
         let rcc = device.RCC.constrain();
-        let clocks = rcc.cfgr.use_hse(8.mhz())
-                             .sysclk(168.mhz())
-                             .freeze();
+        let _clocks = rcc.cfgr.use_hse(8.mhz())
+                              .sysclk(168.mhz())
+                              .freeze();
 
         hprintln!("Setting I2S clock").unwrap();
         let rcc_registers = unsafe { &*RCC::ptr() };
@@ -107,7 +80,7 @@ const APP: () = {
             _ => ()
         }
 
-        schedule.poll_gpio(scheduled + gpio_poll_interval.cycles()).unwrap();
+        schedule.poll_gpio(scheduled + GPIO_POLL_INTERVAL.cycles()).unwrap();
     }
 
     // #[interrupt(resources = [USER_BUTTON, LEDS])]
