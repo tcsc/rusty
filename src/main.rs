@@ -4,31 +4,30 @@
 // RTFM macros need this for clean clippy report
 #![allow(clippy::toplevel_ref_arg)]
 
-mod button;
-
 extern crate panic_semihosting;
 use stm32f407_audio as audio;
 use stm32f407g_disc as board;
 
 use crate::board::{
-    led::{LedColor, Leds},
     stm32::{RCC},
 };
 
 use rtfm::{app, Instant};
 use cortex_m_semihosting::{hprintln}; // debug, 
-use stm32f4xx_hal::{prelude::*, gpio};
+use stm32f4xx_hal::{
+    prelude::*, 
+    gpio::{self, Input, Output, PullDown, PushPull, gpioa, gpiod}};
 
-use button::Button;
+use portable::{Button, ButtonEvent, Led};
 
-type UserButtonPin = gpio::gpioa::PA0<gpio::Input<gpio::PullDown>>;
+type UserButtonPin = gpioa::PA0<Input<PullDown>>;
 
 const GPIO_POLL_INTERVAL : u32 = 840_000;
 
 #[app(device = stm32f407g_disc)]
 const APP: () = {
-    static mut USER_BUTTON : button::Button<UserButtonPin> = ();
-    static mut LEDS : Leds = ();
+    static mut USER_BUTTON : Button<UserButtonPin> = ();
+    static mut LED_BLUE : Led<gpiod::PD15<Output<PushPull>>> = ();
 
     #[init(schedule = [poll_gpio])]
     fn init() {
@@ -47,50 +46,47 @@ const APP: () = {
         audio::set_i2s_clock(rcc_registers, 290, 2);
         hprintln!("I2S clock set").unwrap();
 
-        // enable user button gpio clock
-        rcc_registers.ahb1enr.write(|w| w.gpioaen().bit(true) );
+        // enable user button GPIOA & GPIOD port clocks
+        rcc_registers.ahb1enr.write(|w| {
+            w.gpioaen().bit(true);
+            w.gpioden().bit(true)
+        });
 
         // configure GPIO for user button
         let gpio_port_a = device.GPIOA.split();
-        let user_button_pin = gpio_port_a.pa0.into_pull_down_input();
+        let user_button_pin = gpio_port_a.pa0
+                                         .into_pull_down_input();
 
-        // configure LED bank
+        // configure LED GPIO
         let gpio_port_d = device.GPIOD.split();
+        let audio_reset_pin = gpio_port_d.pd4
+                                         .into_push_pull_output()
+                                         .set_speed(gpio::Speed::High);
 
-        // start a timer for polling the GPIO
-        // let mut button_timer = Timer::tim3(device.TIM3, 1.khz(), clocks);
-        // button_timer.listen(timer::Event::TimeOut);
-
+        // schedule the GPIO polling task
         schedule.poll_gpio(Instant::now()).unwrap();
         
+        // Add all of the resources 
         USER_BUTTON = Button::new(user_button_pin);
-        LEDS = Leds::new(gpio_port_d);
+        LED_BLUE = Led::new(gpio_port_d.pd15
+                                       .into_push_pull_output());
     }
 
-    #[task(resources = [USER_BUTTON, LEDS], schedule = [poll_gpio])]
+    #[task(resources = [USER_BUTTON, LED_BLUE], schedule = [poll_gpio])]
     fn poll_gpio() {
         // poll relevant GPIOs
         match resources.USER_BUTTON.poll() {
-            button::Event::Up => {
-                resources.LEDS[LedColor::Blue].off()
+            ButtonEvent::Up => {
+                resources.LED_BLUE.off()
             },
-            button::Event::Down => {
-                resources.LEDS[LedColor::Blue].on()
+            ButtonEvent::Down => {
+                resources.LED_BLUE.on()
             },
             _ => ()
         }
 
         schedule.poll_gpio(scheduled + GPIO_POLL_INTERVAL.cycles()).unwrap();
     }
-
-    // #[interrupt(resources = [USER_BUTTON, LEDS])]
-    // fn TIM3() {
-    //     // clear timer interrupt
-    //     let timer = unsafe { &*stm32::TIM3::ptr() };
-    //     timer.sr.modify(|_, w| w.uif().clear_bit());
-
-     
-    // }
 
     extern "C" {
         fn USART1();

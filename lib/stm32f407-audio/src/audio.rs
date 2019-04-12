@@ -5,4 +5,3 @@ pub enum PeripheralClock {
     RealTime = 0x0000_0002,
     PLLI2S = 0x0000_0004
 } 
-

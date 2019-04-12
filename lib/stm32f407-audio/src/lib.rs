@@ -1,6 +1,7 @@
 #![no_std]
 
 mod audio;
+mod cs43l22;
 pub use audio::PeripheralClock;
 use stm32f4xx_hal::stm32;
 
@@ -11,7 +12,6 @@ fn pll_disable(rcc: &stm32::rcc::RegisterBlock) {
     hprintln!("Waiting for I2S PLL to shut down").unwrap();
     while rcc.cr.read().plli2srdy().is_ready() {
         // TODO - add some sort of timeout
-        hprintln!(".").unwrap();
     }
     hprintln!("I2S PLL is shut down").unwrap()
     
@@ -21,7 +21,7 @@ fn pll_enable(rcc: &stm32::rcc::RegisterBlock) {
     rcc.cr.modify(|_, dst| dst.plli2son().on() );
     hprintln!("Waiting for I2S PLL to start up").unwrap();
     while rcc.cr.read().plli2srdy().is_not_ready() {
-        hprintln!(".").unwrap();
+        // TODO - add some sort of timeout
     }
     hprintln!("I2S PLL to started").unwrap();
 }
