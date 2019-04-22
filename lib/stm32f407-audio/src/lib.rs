@@ -1,11 +1,13 @@
 #![no_std]
 
 mod audio;
-mod cs43l22;
+pub mod cs43l22;
+
 pub use audio::PeripheralClock;
+
 use stm32f4xx_hal::stm32;
 
-use cortex_m_semihosting::{hprintln}; // debug, 
+use cortex_m_semihosting::{hprintln};
 
 fn pll_disable(rcc: &stm32::rcc::RegisterBlock) {
     rcc.cr.write(|dst| dst.plli2son().off());
@@ -14,7 +16,6 @@ fn pll_disable(rcc: &stm32::rcc::RegisterBlock) {
         // TODO - add some sort of timeout
     }
     hprintln!("I2S PLL is shut down").unwrap()
-    
 }
 
 fn pll_enable(rcc: &stm32::rcc::RegisterBlock) {
@@ -27,8 +28,8 @@ fn pll_enable(rcc: &stm32::rcc::RegisterBlock) {
 }
 
 
-pub fn set_i2s_clock(rcc: &stm32::rcc::RegisterBlock, 
-                     multiplier: u16, 
+pub fn set_i2s_clock(rcc: &stm32::rcc::RegisterBlock,
+                     multiplier: u16,
                      divisor: u8) {
     pll_disable(rcc);
     rcc.plli2scfgr.modify(|_, w| unsafe {
