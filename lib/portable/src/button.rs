@@ -1,5 +1,7 @@
 
-//use cortex_m_semihosting::{hprintln};
+use embedded_hal::{
+    digital::v2::InputPin
+};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Event {
@@ -22,20 +24,20 @@ pub struct Button<InputType> {
 
 const SWITCH_THRESHOLD : u8 = 5;
 
-impl<T> Button<T> where T : ::embedded_hal::digital::InputPin {
+impl<T> Button<T> where T : InputPin {
 
     pub fn new(pin: T) -> Button<T> {
         Button {pin, state: SignalState::High, contra_count: 0}
-    } 
-    
-    pub fn poll(&mut self) -> Event {
+    }
+
+    pub fn poll(&mut self) -> Result<Event, T::Error> {
         use SignalState::*;
 
-        let pin_is_high = self.pin.is_high();
+        let pin_is_high = self.pin.is_high()?;
         let pin_is_low = !pin_is_high;
 
         // hprintln!("Button state: {:?}, signal: {}, contra_count: {}",
-        //     self.state, 
+        //     self.state,
         //     if pin_is_high { "high" } else { "low" },
         //     self.contra_count ).unwrap();
 
@@ -49,7 +51,7 @@ impl<T> Button<T> where T : ::embedded_hal::digital::InputPin {
             }
         }
 
-        match self.state {
+        let event = match self.state {
             High if self.contra_count >= SWITCH_THRESHOLD => {
                 self.state = Low;
                 self.contra_count = 0;
@@ -63,7 +65,9 @@ impl<T> Button<T> where T : ::embedded_hal::digital::InputPin {
             }
 
             _ => Event::None
-        }
+        };
+
+        Ok(event)
     }
 
     pub fn is_up(&self) -> bool {

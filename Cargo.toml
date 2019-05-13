@@ -8,14 +8,20 @@ version = "0.1.0"
 [workspace]
 
 [dependencies]
-cortex-m-semihosting = "0.3.2"
-panic-semihosting = "0.5.1"
-embedded-hal = "0.2.2"
-portable = { path = "lib/portable" }
-stm32f407-audio = { path = "lib/stm32f407-audio" }
-stm32f407g-disc = "0.2.0"
 cortex-m-rtfm = { version = "0.4.2", features = ["timer-queue"] }
-stm32f4xx-hal = { version = "0.3.0", features = ["stm32f407"] }
+cortex-m-semihosting = "0.3.2"
+embedded-hal = "0.2.2"
+heapless = "0.4.4"
+panic-semihosting = "0.5.1"
+portable = { path = "lib/portable" }
+serial-log = { path = "lib/serial-log" }
+stm32f407-audio = { path = "lib/stm32f407-audio" }
+stm32f4xx-hal = { version = "0.3.0", features = ["stm32f407", "rt"] }
+
+
+[dependencies.log]
+default-features = false
+version = "0.4.6"
 
 # this lets you use `cargo fix`!
 [[bin]]

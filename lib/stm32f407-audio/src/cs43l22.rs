@@ -37,9 +37,6 @@ impl Revision {
     }
 }
 
-
-const ChipId : u8 = 7;
-
 pub struct Driver<I2CT, ResetPinT> {
     i2c: I2CT,
     addr: u8,
