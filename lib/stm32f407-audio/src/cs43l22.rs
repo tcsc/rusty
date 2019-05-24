@@ -1,3 +1,4 @@
+use log::{info};
 
 use stm32f4xx_hal::{
     hal::{
@@ -5,8 +6,6 @@ use stm32f4xx_hal::{
         blocking::i2c::{Write, WriteRead}
     },
 };
-
-use cortex_m_semihosting::{hprintln}; // debug,
 
 #[derive(Clone, Copy, Debug)]
 pub enum Register {
@@ -59,7 +58,7 @@ impl<I2CT, ResetPinT, E> Driver<I2CT, ResetPinT>
         let mut d = Driver { i2c, addr, reset_pin };
         d.power_on();
         let id = d.chip_id()?;
-        hprintln!("CS43L22 Revision: {:?}", id).unwrap();
+        info!("CS43L22 Revision: {:?}", id);
         Ok(d)
     }
 
@@ -74,7 +73,7 @@ impl<I2CT, ResetPinT, E> Driver<I2CT, ResetPinT>
     fn chip_id(&mut self) -> Result<Revision, DriverError> {
         let mut r : [u8; 1] = [0];
 
-        hprintln!("Reading register...").unwrap();
+        info!("Reading register...");
         self.i2c.write_read(self.addr, &[Register::ChipId.addr()], &mut r)
                 .map_err(|_| DriverError::Comm)?;
         let register = r[0];

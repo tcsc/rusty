@@ -20,6 +20,6 @@ pub type I2CBus1 = I2c<stm32::I2C1, (I2C1SclPin, I2C1SdaPin)>;
 pub type AudioResetPin = PD4<Output<PushPull>>;
 pub type Cs43l22 = cs43l22::Driver<I2CBus1, AudioResetPin>;
 
-type Usart1Tx = PA9<gpio::Alternate<AF7>>;
-type Usart1Rx = PA10<gpio::Alternate<AF7>>;
+pub type Usart1Tx = PA9<gpio::Alternate<AF7>>;
+pub type Usart1Rx = PA10<gpio::Alternate<AF7>>;
 pub type Usart1 = Serial<stm32::USART1, (Usart1Tx, Usart1Rx)>;

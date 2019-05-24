@@ -36,10 +36,10 @@ impl<T> Button<T> where T : InputPin {
         let pin_is_high = self.pin.is_high()?;
         let pin_is_low = !pin_is_high;
 
-        // hprintln!("Button state: {:?}, signal: {}, contra_count: {}",
+        // info!("Button state: {:?}, signal: {}, contra_count: {}",
         //     self.state,
         //     if pin_is_high { "high" } else { "low" },
-        //     self.contra_count ).unwrap();
+        //     self.contra_count )
 
         match self.state {
             High if pin_is_high => self.contra_count = 0,

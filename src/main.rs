@@ -5,14 +5,17 @@
 #![allow(clippy::toplevel_ref_arg)]
 
 extern crate panic_semihosting;
+
+use cortex_m_semihosting::hprintln;
+
 use stm32f407_audio::{self as audio, cs43l22};
 use serial_log::SerialLogger;
-
+use log::{info};
+use nb;
 mod types;
 use types::*;
 
 use rtfm::{app, Instant};
-use cortex_m_semihosting::{hprintln}; // debug,
 use heapless::consts::U256;
 
 use stm32f4xx_hal::{
@@ -68,19 +71,40 @@ fn init_audio(
 
 static mut LOGGER : Option<SerialLogger<Usart1, U256>> = None;
 
-fn init_logger<TX, RX>(uart: USART1, tx_pin: TX, rx_pin: RX, clocks: Clocks)
-    -> SerialLogger<Serial<USART1, (TX,RX)>, U256>
-        where TX : PinTx<USART1> + Send,
-              RX : PinRx<USART1> + Send
-{
+fn init_logger(uart: USART1,
+               tx_pin: Usart1Tx,
+               rx_pin: Usart1Rx,
+               clocks: Clocks) {
     let config = SerialConfig {
         baudrate: 115_200.bps(),
         wordlength: WordLength::DataBits8,
         parity: Parity::ParityNone,
         stopbits: StopBits::STOP1
     };
-    let serial_port = Serial::usart1(uart, (tx_pin, rx_pin), config, clocks).unwrap();
-    SerialLogger::new(serial_port, log::Level::Info)
+
+    let usart = unsafe { &*USART1::ptr() };
+    let baudrate = usart.brr.read();
+    hprintln!("m: {}, f: {}",
+        baudrate.div_mantissa().bits(),
+        baudrate.div_fraction().bits()).unwrap();
+
+    let mut serial_port = Serial::usart1(uart, (tx_pin, rx_pin), config, clocks).unwrap();
+
+    let baudrate = usart.brr.read();
+    hprintln!("m: {}, f: {}",
+        baudrate.div_mantissa().bits(),
+        baudrate.div_fraction().bits()).unwrap();
+
+    nb::block!(serial_port.write(0x00u8)).unwrap();
+    nb::block!(serial_port.write(0x3Eu8)).unwrap();
+    nb::block!(serial_port.write(0x3Eu8)).unwrap();
+    nb::block!(serial_port.write(0x20u8)).unwrap();
+
+    let logger = SerialLogger::new(serial_port, log::Level::Debug);
+    unsafe {
+        crate::LOGGER = Some(logger);
+        log::set_logger(LOGGER.as_ref().unwrap()).unwrap();
+    }
 }
 
 #[app(device = stm32f4xx_hal::stm32)]
@@ -91,36 +115,34 @@ const APP: () = {
 
     #[init(schedule = [poll_gpio])]
     fn init() {
+        hprintln!("Hello, world").unwrap();
+
         let rcc = device.RCC.constrain();
         let clocks = rcc.cfgr.use_hse(8.mhz())
                              .sysclk(168.mhz())
                              .freeze();
 
-        // initialise logging over UART1
-        let gpio_port_a = device.GPIOA.split();
-        let logger = init_logger(device.USART1,
-                                 gpio_port_a.pa9.into_alternate_af7(),
-                                 gpio_port_a.pa10.into_alternate_af7(),
-                                 clocks);
-        unsafe {
-            crate::LOGGER = Some(logger);
-            log::set_logger(LOGGER.as_ref().unwrap()).unwrap();
-        }
-
-        hprintln!("Setting I2S clock").unwrap();
-        let rcc_registers = unsafe { &*RCC::ptr() };
-
-        // prepare I2S PLL clock for 44.1 kHz output
-        audio::set_i2s_clock(rcc_registers, 290, 2);
-        hprintln!("I2S clock set").unwrap();
-
         // enable GPIOx port clocks
+        let rcc_registers = unsafe { &*RCC::ptr() };
         rcc_registers.ahb1enr.write(|w| {
             w.gpioaen().bit(true) // user button
              .gpioben().bit(true) // I2C bus
              .gpiocen().bit(true)
              .gpioden().bit(true) // LEDs
         });
+
+
+        // initialise logging over UART1
+        let gpio_port_a = device.GPIOA.split();
+        init_logger(device.USART1,
+                    gpio_port_a.pa9.into_alternate_af7(),
+                    gpio_port_a.pa10.into_alternate_af7(),
+                    clocks);
+
+        info!("Setting I2S clock");
+        // prepare I2S PLL clock for 44.1 kHz output
+        audio::set_i2s_clock(rcc_registers, 290, 2);
+        info!("I2S clock set");
 
         // enable I2S clocks
         rcc_registers.apb1enr.write(|w| {
@@ -158,7 +180,10 @@ const APP: () = {
         resources.USER_BUTTON.poll()
             .and_then(|event| {
                 match event {
-                    ButtonEvent::Up => resources.LED_BLUE.off(),
+                    ButtonEvent::Up => {
+                        info!("Button up!");
+                        resources.LED_BLUE.off()
+                    },
                     ButtonEvent::Down => resources.LED_BLUE.on(),
                     _ => Ok(())
                 }
