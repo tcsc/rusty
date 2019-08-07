@@ -5,9 +5,9 @@ authors = ["Trent Clarke <trent.clarke@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-bare-metal = "0.2.4"
-cortex-m = "0.5.10"
-embedded-hal = "0.2.2"
+bare-metal = "0.2"
+cortex-m = "0.6"
+embedded-hal = "0.2"
 log = {version = "0.4", default-features = false}
 heapless = "0.4.2"
 nb = "0.1.2"

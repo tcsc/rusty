@@ -43,12 +43,14 @@ impl<SerialT, N> SerialLogger<SerialT, N>
     }
 }
 
-fn write_all<S>(s: &mut S, buffer: &[u8]) -> Result<(), S::Error>
+fn writeln<S>(s: &mut S, buffer: &[u8]) -> Result<(), S::Error>
     where S : hal::serial::Write<u8>
 {
     for &b in buffer {
         nb::block!(s.write(b))?
     }
+    nb::block!(s.write(0x0D))?;
+    nb::block!(s.write(0x0A))?;
     Ok(())
 }
 
@@ -65,7 +67,7 @@ impl<SerialT, N> log::Log for SerialLogger<SerialT, N>
             let mut buffer : heapless::String<N> = heapless::String::new();
             if buffer.write_fmt(record.args().clone()).is_ok() {
                 self.with_serial_port(|serial_port|{
-                    let _ = write_all(serial_port, buffer.as_bytes());
+                    let _ = writeln(serial_port, buffer.as_bytes());
                 })
             }
         }

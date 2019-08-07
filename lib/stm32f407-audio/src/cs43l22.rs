@@ -2,7 +2,7 @@ use log::{info};
 
 use stm32f4xx_hal::{
     hal::{
-        digital::OutputPin,
+        digital::v2::OutputPin,
         blocking::i2c::{Write, WriteRead}
     },
 };
@@ -50,7 +50,8 @@ pub enum DriverError {
 }
 
 impl<I2CT, ResetPinT, E> Driver<I2CT, ResetPinT>
-    where ResetPinT : OutputPin,
+    where ResetPinT : OutputPin, 
+          E : core::fmt::Debug,
           I2CT :  WriteRead<Error = E> + Write<Error = E>,
 {
     pub fn init(i2c: I2CT, addr: u8, reset_pin: ResetPinT)
@@ -63,11 +64,15 @@ impl<I2CT, ResetPinT, E> Driver<I2CT, ResetPinT>
     }
 
     pub fn power_on(&mut self) {
-        self.reset_pin.set_high();
+        if let Err(_) = self.reset_pin.set_high() {
+            panic!("Failed to power on");
+        }
     }
 
     pub fn power_off(&mut self) {
-        self.reset_pin.set_low();
+        if let Err(_) = self.reset_pin.set_low() {
+            panic!("Failed to power off");
+        }
     }
 
     fn chip_id(&mut self) -> Result<Revision, DriverError> {

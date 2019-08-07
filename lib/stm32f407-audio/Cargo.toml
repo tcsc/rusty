@@ -9,7 +9,7 @@ embedded-hal = "0.2.2"
 
 [dependencies.stm32f4xx-hal]
 features = ["stm32f407"]
-version = "0.3.0"
+version = "0.5"
 
 [dependencies.log]
 default-features = false

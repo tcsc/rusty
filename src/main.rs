@@ -8,19 +8,20 @@ extern crate panic_semihosting;
 
 use cortex_m_semihosting::hprintln;
 
-use stm32f407_audio::{self as audio, cs43l22};
+use stm32f407_audio::{self as audio /*, cs43l22 */};
 use serial_log::SerialLogger;
-use log::{info};
+use log::{info, Level, LevelFilter};
 use nb;
 mod types;
 use types::*;
+use stm32f4xx_hal::serial::Serial;
 
-use rtfm::{app, Instant};
+use rtfm::{app};//, Instant};
 use heapless::consts::U256;
 
 use stm32f4xx_hal::{
     prelude::*,
-    stm32::{self, RCC, USART1},
+    stm32::{self, RCC, USART2},
     gpio::{self, Input, Output, PushPull, Floating,
         gpiob::{PB6, PB9},
         gpiod::{PD4, PD15},
@@ -28,7 +29,7 @@ use stm32f4xx_hal::{
     i2c::I2c,
     rcc::Clocks,
     serial::{
-        PinTx, PinRx, Serial,
+        //PinTx, PinRx, Serial,
         config::{
             Config as SerialConfig,
             Parity,
@@ -42,6 +43,9 @@ use portable::{Button, ButtonEvent, Led};
 
 const GPIO_POLL_INTERVAL : u32 = 840_000;
 const AUDIO_DEVICE_ADDR : u8 = 0x4a;
+
+// A lazily-initialised global logger. 
+static mut LOGGER : Option<SerialLogger<LogUart, U256>> = None;
 
 fn init_audio(
     i2c1: stm32::I2C1,
@@ -69,42 +73,33 @@ fn init_audio(
         audio_reset).unwrap()
 }
 
-static mut LOGGER : Option<SerialLogger<Usart1, U256>> = None;
-
-fn init_logger(uart: USART1,
-               tx_pin: Usart1Tx,
-               rx_pin: Usart1Rx,
+fn init_logger(uart: USART2,
+               tx_pin: LogTxPin,
+               rx_pin: LogRxPin,
                clocks: Clocks) {
     let config = SerialConfig {
-        baudrate: 115_200.bps(),
+        baudrate: 19200.bps(),
         wordlength: WordLength::DataBits8,
         parity: Parity::ParityNone,
         stopbits: StopBits::STOP1
     };
 
-    let usart = unsafe { &*USART1::ptr() };
-    let baudrate = usart.brr.read();
-    hprintln!("m: {}, f: {}",
-        baudrate.div_mantissa().bits(),
-        baudrate.div_fraction().bits()).unwrap();
+    let mut serial_port = Serial::usart2(
+        uart, (tx_pin, rx_pin), config, clocks).unwrap();
 
-    let mut serial_port = Serial::usart1(uart, (tx_pin, rx_pin), config, clocks).unwrap();
-
-    let baudrate = usart.brr.read();
-    hprintln!("m: {}, f: {}",
-        baudrate.div_mantissa().bits(),
-        baudrate.div_fraction().bits()).unwrap();
-
-    nb::block!(serial_port.write(0x00u8)).unwrap();
-    nb::block!(serial_port.write(0x3Eu8)).unwrap();
-    nb::block!(serial_port.write(0x3Eu8)).unwrap();
-    nb::block!(serial_port.write(0x20u8)).unwrap();
-
-    let logger = SerialLogger::new(serial_port, log::Level::Debug);
-    unsafe {
-        crate::LOGGER = Some(logger);
-        log::set_logger(LOGGER.as_ref().unwrap()).unwrap();
+    for b in "\r\nWelcome to rusty!\r\n".as_bytes() {
+        nb::block!(serial_port.write(*b)).is_ok();
     }
+
+    let logger = SerialLogger::new(serial_port, Level::Debug);
+    let logref = unsafe {
+        crate::LOGGER = Some(logger);
+        crate::LOGGER.as_ref().unwrap()
+    };
+
+    log::set_logger(logref)
+        .map(|_| log::set_max_level(LevelFilter::Trace))
+        .unwrap();
 }
 
 #[app(device = stm32f4xx_hal::stm32)]
@@ -113,10 +108,8 @@ const APP: () = {
     static mut LED_BLUE : Led<PD15<Output<PushPull>>> = ();
     static mut AUDIO_DEVICE : Cs43l22 = ();
 
-    #[init(schedule = [poll_gpio])]
+    #[init()]
     fn init() {
-        hprintln!("Hello, world").unwrap();
-
         let rcc = device.RCC.constrain();
         let clocks = rcc.cfgr.use_hse(8.mhz())
                              .sysclk(168.mhz())
@@ -131,12 +124,13 @@ const APP: () = {
              .gpioden().bit(true) // LEDs
         });
 
-
         // initialise logging over UART1
         let gpio_port_a = device.GPIOA.split();
-        init_logger(device.USART1,
-                    gpio_port_a.pa9.into_alternate_af7(),
-                    gpio_port_a.pa10.into_alternate_af7(),
+        let gpio_port_b = device.GPIOB.split();
+
+        init_logger(device.USART2,
+                    gpio_port_a.pa2.into_alternate_af7(),
+                    gpio_port_a.pa3.into_alternate_af7(),
                     clocks);
 
         info!("Setting I2S clock");
@@ -155,10 +149,9 @@ const APP: () = {
         let user_button_pin = gpio_port_a.pa0
                                          .into_pull_down_input();
 
-        // schedule the GPIO polling task
-        schedule.poll_gpio(Instant::now()).unwrap();
+        // // schedule the GPIO polling task
+        // schedule.poll_gpio(Instant::now()).unwrap();
 
-        let gpio_port_b = device.GPIOB.split();
         let gpio_port_d = device.GPIOD.split();
         let audio_device = init_audio(device.I2C1,
                    gpio_port_b.pb6,
@@ -174,26 +167,26 @@ const APP: () = {
         AUDIO_DEVICE = audio_device;
     }
 
-    #[task(resources = [USER_BUTTON, LED_BLUE], schedule = [poll_gpio])]
-    fn poll_gpio() {
-        // poll relevant GPIOs
-        resources.USER_BUTTON.poll()
-            .and_then(|event| {
-                match event {
-                    ButtonEvent::Up => {
-                        info!("Button up!");
-                        resources.LED_BLUE.off()
-                    },
-                    ButtonEvent::Down => resources.LED_BLUE.on(),
-                    _ => Ok(())
-                }
-            })
-            .unwrap();
+    // //#[task(resources = [USER_BUTTON, LED_BLUE], schedule = [poll_gpio])]
+    // fn poll_gpio() {
+    //     // poll relevant GPIOs
+    //     resources.USER_BUTTON.poll()
+    //         .and_then(|event| {
+    //             match event {
+    //                 ButtonEvent::Up => {
+    //                     info!("Button up!");
+    //                     resources.LED_BLUE.off()
+    //                 },
+    //                 ButtonEvent::Down => resources.LED_BLUE.on(),
+    //                 _ => Ok(())
+    //             }
+    //         })
+    //         .unwrap();
 
-        schedule.poll_gpio(scheduled + GPIO_POLL_INTERVAL.cycles()).unwrap();
-    }
+    //     //schedule.poll_gpio(scheduled + GPIO_POLL_INTERVAL.cycles()).unwrap();
+    // }
 
-    extern "C" {
-        fn USART3();
-    }
+    // extern "C" {
+    //     fn USART3();
+    // }
 };
